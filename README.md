@@ -81,7 +81,7 @@ EOF
 
 ## Git
 
-`~/.config/git/config` (linked) holds the shared defaults. `~/.gitconfig` is local: Git reads it afterwards, so it overrides the defaults, and `git config --global` writes there. `./install` creates a starter `~/.gitconfig` with only comments when none exists, and never edits an existing one.
+`~/.config/git/config` (linked) holds the shared defaults. `~/.gitconfig` is local: Git reads it afterwards, so it overrides the defaults, and `git config --global` writes there. `./install` creates a starter `~/.gitconfig` with only comments when none exists, and never edits an existing one. If an existing `~/.gitconfig` resolves into this clone, `./install` warns, because `git config --global` would then change repository files; replace it with a local file.
 
 `~/.gitconfig` is also the include manifest. Git includes take explicit file names, not directories, so list each fragment in `~/.config/git/conf.d/`. A listed file that does not exist is ignored.
 

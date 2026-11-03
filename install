@@ -89,6 +89,10 @@ def link(home, dry_run):
 def create_gitconfig(home, dry_run):
     path = os.path.join(home, ".gitconfig")
     if os.path.lexists(path):
+        if os.path.realpath(path).startswith(REPO + os.sep):
+            print("Warning: " + path + " resolves into this repository ("
+                  + os.path.realpath(path) + "), so `git config --global` can modify"
+                  " repository files. Replace it with a local file.")
         return
     print(("would create " if dry_run else "created ") + path)
     if not dry_run:

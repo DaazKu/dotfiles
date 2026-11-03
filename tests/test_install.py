@@ -98,9 +98,32 @@ class InstallLinkTest(HomeTestCase):
         with open(gitconfig) as handle:
             self.assertIn("name = mine", handle.read())
 
+    def test_gitconfig_linked_into_the_repository_warns_and_is_kept(self):
+        clone = os.path.join(self.tmp, "clone")
+        shutil.copytree(REPO, clone, ignore=shutil.ignore_patterns(".git", ".worktrees"))
+        untracked = os.path.join(clone, "my.gitconfig")
+        open(untracked, "w").close()
+        gitconfig = os.path.join(self.home, ".gitconfig")
+        for target in (os.path.join(clone, "examples", ".gitconfig"), untracked):
+            with self.subTest(target=target):
+                if os.path.lexists(gitconfig):
+                    os.remove(gitconfig)
+                os.symlink(target, gitconfig)
+                result = self.install(installer=os.path.join(clone, "install"))
+                self.assertIn("Warning: " + gitconfig + " resolves into this repository", result.stdout)
+                self.assertIn("git config --global` can modify repository files", result.stdout)
+                self.assertEqual(os.readlink(gitconfig), target)
+
+    def test_local_gitconfig_link_outside_the_repository_is_quiet(self):
+        outside = os.path.join(self.tmp, "my.gitconfig")
+        open(outside, "w").close()
+        os.symlink(outside, os.path.join(self.home, ".gitconfig"))
+        self.assertNotIn("Warning", self.install().stdout)
+
     def test_existing_gitconfig_is_kept(self):
         gitconfig = self.write(".gitconfig", "[user]\n\tname = existing\n")
-        self.install()
+        result = self.install()
+        self.assertNotIn("Warning", result.stdout)
         with open(gitconfig) as handle:
             self.assertEqual(handle.read(), "[user]\n\tname = existing\n")
 
