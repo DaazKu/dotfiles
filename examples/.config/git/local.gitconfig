@@ -1,0 +1,11 @@
+# Machine-local Git manifest, loaded last by ~/.config/git/config.
+# Git includes name explicit files, so list every conf.d fragment here.
+# Relative paths are relative to this file.
+
+# Default identity.
+[include]
+	path = conf.d/identity-personal.gitconfig
+
+# Checkouts under ~/work/ use the work identity.
+[includeIf "gitdir:~/work/"]
+	path = conf.d/identity-work.gitconfig
