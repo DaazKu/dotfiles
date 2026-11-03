@@ -3,10 +3,11 @@ import importlib.util
 import io
 import os
 import shutil
+import sys
 import unittest
 from unittest import mock
 
-from support import INSTALL, REPO, HomeTestCase
+from support import INSTALL, REPO, SYSTEM_PATH, HomeTestCase
 
 
 def repo_files():
@@ -134,8 +135,44 @@ class PackageCommandTest(HomeTestCase):
         self.assertEqual(self.commands("Linux"), [
             ["sudo", "apt-get", "update"],
             ["sudo", "apt-get", "install", "-y", "curl", "git", "gh", "tmux"],
-            ["sh", "-c", "curl -fsSL https://herdr.dev/install.sh | sh"],
+            ["sh", "-c", self.installer.HERDR_INSTALL],
         ])
+
+    def run_herdr_install(self, curl_script):
+        curl = os.path.join(self.bin, "curl")
+        with open(curl, "w") as handle:
+            handle.write("#!/bin/sh\n" + curl_script)
+        os.chmod(curl, 0o755)
+        env = self.env(PATH=self.bin + ":" + SYSTEM_PATH, RECORD=os.path.join(self.tmp, "ran"))
+        return self.run_cmd(["sh", "-c", self.installer.HERDR_INSTALL], check=False, env=env)
+
+    def test_herdr_install_fails_when_download_fails(self):
+        result = self.run_herdr_install("echo 'curl: (22) 503' >&2; exit 22\n")
+        self.assertNotEqual(result.returncode, 0)
+
+    def test_herdr_install_fails_when_installer_fails(self):
+        result = self.run_herdr_install("echo 'exit 3'\n")
+        self.assertEqual(result.returncode, 3)
+
+    def test_herdr_install_runs_downloaded_installer(self):
+        result = self.run_herdr_install("echo 'echo installed > \"$RECORD\"'\n")
+        self.assertEqual(result.returncode, 0)
+        with open(os.path.join(self.tmp, "ran")) as handle:
+            self.assertEqual(handle.read(), "installed\n")
+
+    @unittest.skipUnless(sys.platform.startswith("linux"), "apt path runs on Linux")
+    def test_failed_herdr_download_fails_the_install(self):
+        self.fake("apt-get")
+        with open(os.path.join(self.bin, "sudo"), "w") as handle:
+            handle.write('#!/bin/sh\nexec "$@"\n')
+        with open(os.path.join(self.bin, "curl"), "w") as handle:
+            handle.write("#!/bin/sh\nexit 22\n")
+        for name in ("sudo", "curl"):
+            os.chmod(os.path.join(self.bin, name), 0o755)
+        result = self.run_cmd(["python3", INSTALL, "--packages"], check=False,
+                              env=self.env(PATH=self.bin + ":" + SYSTEM_PATH))
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("Package installation failed", result.stderr)
 
     def test_ubuntu_as_root_without_sudo_keeps_existing_herdr(self):
         self.fake("apt-get")

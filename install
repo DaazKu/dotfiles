@@ -22,7 +22,8 @@ SOURCE = os.path.join(REPO, "home")
 TOOLS = ["git", "gh", "tmux", "herdr"]
 BREW_PACKAGES = ["git", "gh", "tmux"]
 APT_PACKAGES = ["curl", "git", "gh", "tmux"]
-HERDR_INSTALL = "curl -fsSL https://herdr.dev/install.sh | sh"
+# Fails when either the download or the installer fails, unlike curl | sh.
+HERDR_INSTALL = 'set -e; script=$(curl -fsSL https://herdr.dev/install.sh); printf "%s\\n" "$script" | sh'
 
 
 def plan_links(home):
