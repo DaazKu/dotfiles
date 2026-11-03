@@ -1,0 +1,12 @@
+# Machine-local Git settings, read after the shared defaults in
+# ~/.config/git/config. `git config --global` also writes here.
+# Git includes name explicit files, so list every conf.d fragment.
+
+# Default identity. Set identities here, never with
+# `git config --global user.name`: a later global value overrides them all.
+[include]
+	path = ~/.config/git/conf.d/identity-personal.gitconfig
+
+# Checkouts under ~/work/ use the work identity.
+[includeIf "gitdir:~/work/"]
+	path = ~/.config/git/conf.d/identity-work.gitconfig

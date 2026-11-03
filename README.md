@@ -20,7 +20,7 @@ cd ~/projects/dotfiles
 ./install             # link the files and report missing tools
 ```
 
-The links point into the clone, so keep it where it is. Open a new shell afterwards.
+The links point into the clone, so keep it where it is. It also creates a starter `~/.gitconfig` if you have none (see [Git](#git)). Open a new shell afterwards.
 
 ### Conflicts
 
@@ -81,19 +81,21 @@ EOF
 
 ## Git
 
-`~/.config/git/config` holds the shared defaults and then includes the local manifest `~/.config/git/local.gitconfig`, so local settings override the defaults. Git includes take explicit file names, not directories, so the manifest lists each fragment in `~/.config/git/conf.d/`. A listed file that does not exist is ignored.
+`~/.config/git/config` (linked) holds the shared defaults. `~/.gitconfig` is local: Git reads it afterwards, so it overrides the defaults, and `git config --global` writes there. `./install` creates a starter `~/.gitconfig` with only comments when none exists, and never edits an existing one.
+
+`~/.gitconfig` is also the include manifest. Git includes take explicit file names, not directories, so list each fragment in `~/.config/git/conf.d/`. A listed file that does not exist is ignored.
 
 Identities are local fragments selected by checkout directory with `includeIf "gitdir:..."`. Start from the examples, which use fictional identities:
 
 ```sh
 mkdir -p ~/.config/git/conf.d
-cp -n examples/.config/git/local.gitconfig ~/.config/git/
+cat examples/.gitconfig >> ~/.gitconfig
 cp -n examples/.config/git/conf.d/*.gitconfig ~/.config/git/conf.d/
 # Edit the names, emails and directories, then check:
 git -C ~/work/some-repo config --show-origin --get user.name
 ```
 
-`git config --global` writes to `~/.gitconfig` when it exists. Otherwise it writes through the link into this repository, where `git status` shows the change. Prefer `git config --file ~/.config/git/local.gitconfig ...`, or edit a fragment.
+Do not set `user.name` or `user.email` with `git config --global`: the value is appended after the includes and overrides every directory identity. Other global writes, such as the credential helper from `gh auth setup-git`, are fine.
 
 ## gh tokens
 

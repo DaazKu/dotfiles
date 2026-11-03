@@ -1,5 +1,5 @@
 # Shared Git defaults. Machine-local settings and identities belong in
-# ~/.config/git/local.gitconfig, which is loaded last and overrides these.
+# ~/.gitconfig, which Git reads after this file.
 
 [init]
 	defaultBranch = main
@@ -7,6 +7,3 @@
 	prune = true
 [push]
 	autoSetupRemote = true
-
-[include]
-	path = ~/.config/git/local.gitconfig

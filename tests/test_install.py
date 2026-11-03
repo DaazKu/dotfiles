@@ -82,10 +82,27 @@ class InstallLinkTest(HomeTestCase):
         self.assertEqual(os.listdir(self.home), [])
 
     def test_local_files_beside_links_are_left_alone(self):
-        local = self.write(".config/git/local.gitconfig", "[user]\n\tname = x\n")
+        local = self.write(".config/git/conf.d/tools.gitconfig", "[alias]\n\tst = status\n")
         self.install()
         self.assertFalse(os.path.islink(local))
         self.assertTrue(os.path.islink(os.path.join(self.home, ".config", "git", "config")))
+
+    def test_starter_gitconfig_is_created_only_when_missing(self):
+        self.install()
+        gitconfig = os.path.join(self.home, ".gitconfig")
+        self.assertFalse(os.path.islink(gitconfig))
+        with open(gitconfig, "a") as handle:
+            handle.write("[user]\n\tname = mine\n")
+        result = self.install()
+        self.assertNotIn("created", result.stdout)
+        with open(gitconfig) as handle:
+            self.assertIn("name = mine", handle.read())
+
+    def test_existing_gitconfig_is_kept(self):
+        gitconfig = self.write(".gitconfig", "[user]\n\tname = existing\n")
+        self.install()
+        with open(gitconfig) as handle:
+            self.assertEqual(handle.read(), "[user]\n\tname = existing\n")
 
     def test_linked_helper_is_executable(self):
         self.install()

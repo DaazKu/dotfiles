@@ -3,7 +3,8 @@
 
 Checks every destination first and changes nothing if any of them is already
 taken by a real file or a different symlink. Links that are already correct are
-left alone, so it is safe to run again after `git pull`.
+left alone, so it is safe to run again after `git pull`. A starter ~/.gitconfig
+is created only when none exists; existing local files are never edited.
 
 With --packages, also installs the tools this setup expects (Homebrew on macOS,
 apt on Ubuntu, herdr's official installer where apt has no package).
@@ -22,6 +23,14 @@ SOURCE = os.path.join(REPO, "home")
 TOOLS = ["git", "gh", "tmux", "herdr"]
 BREW_PACKAGES = ["git", "gh", "tmux"]
 APT_PACKAGES = ["curl", "git", "gh", "tmux"]
+# Created when missing so `git config --global` (and `gh auth setup-git`)
+# write to a local file instead of through a link into this repository.
+GITCONFIG_STUB = """\
+# Machine-local Git settings, read after the shared defaults in
+# ~/.config/git/config. `git config --global` also writes here.
+# Include conf.d fragments and directory identities: see the dotfiles README.
+"""
+
 # Fails when either the download or the installer fails, unlike curl | sh.
 HERDR_INSTALL = 'set -e; script=$(curl -fsSL https://herdr.dev/install.sh); printf "%s\\n" "$script" | sh'
 
@@ -73,7 +82,18 @@ def link(home, dry_run):
             os.makedirs(os.path.dirname(dst), exist_ok=True)
             os.symlink(src, dst)
     print("%d linked, %d already in place" % (len(to_link), len(linked)))
+    create_gitconfig(home, dry_run)
     return True
+
+
+def create_gitconfig(home, dry_run):
+    path = os.path.join(home, ".gitconfig")
+    if os.path.lexists(path):
+        return
+    print(("would create " if dry_run else "created ") + path)
+    if not dry_run:
+        with open(path, "x") as handle:
+            handle.write(GITCONFIG_STUB)
 
 
 def find_tool(name, home):

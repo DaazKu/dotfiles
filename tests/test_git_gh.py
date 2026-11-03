@@ -3,7 +3,7 @@ import os
 import signal
 import unittest
 
-from support import SYSTEM_PATH, HomeTestCase, require
+from support import REPO, SYSTEM_PATH, HomeTestCase, require
 
 # Records what the wrapper passed on: arguments, token variables and stdin.
 FAKE_GH = r"""#!/bin/sh
@@ -32,7 +32,7 @@ class GitConfigTest(HomeTestCase):
         super().setUp()
         self.install()
         for relative in (
-            ".config/git/local.gitconfig",
+            ".gitconfig",
             ".config/git/conf.d/identity-personal.gitconfig",
             ".config/git/conf.d/identity-work.gitconfig",
         ):
@@ -63,14 +63,32 @@ class GitConfigTest(HomeTestCase):
 
     def test_manifest_fragments_extend_and_override_defaults(self):
         self.write(".config/git/conf.d/tools.gitconfig", "[fetch]\n\tprune = false\n[alias]\n\tst = status\n")
-        with open(os.path.join(self.home, ".config/git/local.gitconfig"), "a") as handle:
-            handle.write("[include]\n\tpath = conf.d/tools.gitconfig\n")
+        with open(os.path.join(self.home, ".gitconfig"), "a") as handle:
+            handle.write("[include]\n\tpath = ~/.config/git/conf.d/tools.gitconfig\n")
         repo = self.repo("projects/app")
         self.assertEqual(self.git_config(repo, "alias.st"), "status")
         self.assertEqual(self.git_config(repo, "fetch.prune"), "false")
 
+    def test_global_writes_stay_out_of_the_repository(self):
+        os.remove(os.path.join(self.home, ".gitconfig"))
+        self.install()
+        tracked = os.path.join(REPO, "home", ".config", "git", "config")
+        with open(tracked) as handle:
+            before = handle.read()
+        self.run_cmd(["git", "config", "--global", "credential.helper", "!gh auth git-credential"])
+        with open(tracked) as handle:
+            self.assertEqual(handle.read(), before)
+        with open(os.path.join(self.home, ".gitconfig")) as handle:
+            self.assertIn("gh auth git-credential", handle.read())
+
+    def test_global_writes_keep_directory_identities(self):
+        repo = self.repo("work/client app")
+        self.run_cmd(["git", "config", "--global", "credential.helper", "!gh auth git-credential"])
+        self.assertEqual(self.git_config(repo, "credential.helper"), "!gh auth git-credential")
+        self.assertEqual(self.git_config(repo, "user.name"), WORK)
+
     def test_missing_manifest_is_fine(self):
-        os.remove(os.path.join(self.home, ".config/git/local.gitconfig"))
+        os.remove(os.path.join(self.home, ".gitconfig"))
         repo = self.repo("projects/app")
         self.assertEqual(self.git_config(repo, "init.defaultBranch"), "main")
         result = self.run_cmd(["git", "config", "--get", "user.name"], cwd=repo, check=False)
@@ -215,7 +233,7 @@ class GhWrapperTest(HomeTestCase):
 
     def test_example_mapping_matches_example_identities(self):
         self.copy_example(".config/gh-wrapper/identities")
-        for relative in (".config/git/local.gitconfig", ".config/git/conf.d/identity-personal.gitconfig",
+        for relative in (".gitconfig", ".config/git/conf.d/identity-personal.gitconfig",
                          ".config/git/conf.d/identity-work.gitconfig"):
             self.copy_example(relative)
         self.write(".config/github-tokens/personal", "personal-secret-token\n", mode=0o600)
@@ -231,7 +249,7 @@ class EndToEndTest(HomeTestCase):
 
     def test_shell_git_and_gh_work_together(self):
         self.install()
-        for relative in (".config/git/local.gitconfig", ".config/git/conf.d/identity-personal.gitconfig",
+        for relative in (".gitconfig", ".config/git/conf.d/identity-personal.gitconfig",
                          ".config/git/conf.d/identity-work.gitconfig", ".config/gh-wrapper/identities"):
             self.copy_example(relative)
         self.write(".config/github-tokens/work", "work-secret-token\n", mode=0o600)

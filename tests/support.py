@@ -43,6 +43,7 @@ class HomeTestCase(unittest.TestCase):
 
     def run_cmd(self, args, check=True, **kwargs):
         kwargs.setdefault("env", self.env())
+        kwargs.setdefault("cwd", self.home)
         result = subprocess.run(
             args, stdin=subprocess.DEVNULL, capture_output=True, text=True, **kwargs
         )
