@@ -253,17 +253,15 @@ class EndToEndTest(HomeTestCase):
                          ".config/git/conf.d/identity-work.gitconfig", ".config/gh-wrapper/identities"):
             self.copy_example(relative)
         self.write(".config/github-tokens/work", "work-secret-token\n", mode=0o600)
-        fake_bin = os.path.join(self.tmp, "real bin")
-        os.mkdir(fake_bin)
-        with open(os.path.join(fake_bin, "gh"), "w") as handle:
-            handle.write(FAKE_GH)
-        os.chmod(os.path.join(fake_bin, "gh"), 0o755)
+        # Login shells put ~/bin after the wrapper but ahead of Homebrew, whose real gh
+        # would otherwise run on macOS.
+        self.write("bin/gh", FAKE_GH, mode=0o755)
         repo = os.path.join(self.home, "work", "client")
         os.makedirs(repo)
         self.run_cmd(["git", "init", "-q", repo])
         record = os.path.join(self.tmp, "record.json")
 
-        env = self.env(PATH=fake_bin + ":" + SYSTEM_PATH, FAKE_GH_RECORD=record)
+        env = self.env(FAKE_GH_RECORD=record)
         self.run_cmd(["bash", "-l", "-c", 'cd "$HOME/work/client" && gh pr list'], env=env)
 
         with open(record) as handle:
