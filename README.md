@@ -44,9 +44,11 @@ New files get linked; existing links already follow the clone. If a file is remo
 ### Tools
 
 ```sh
-./install --packages            # link, then install missing tools
+./install --packages            # link, then install or upgrade tools
 ./install --packages --dry-run  # show the commands only
 ```
+
+Package managers may also upgrade already-installed tools.
 
 - macOS: `brew install git gh tmux herdr`. Homebrew must already be installed.
 - Ubuntu: `apt-get install curl git gh tmux`, then herdr through its [official installer](https://herdr.dev/tui/docs/install/) (`curl -fsSL https://herdr.dev/install.sh | sh`), because apt has no herdr package. It installs to `~/.local/bin`, which these shells put on `PATH`.
