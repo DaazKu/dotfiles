@@ -139,4 +139,4 @@ For Git, `git config --show-origin --get user.name` shows which file set a value
 cd tests && python3 -m unittest -v
 ```
 
-The tests use throwaway homes, the real Bash, Zsh and Git, and a fake `gh`. Zsh tests are skipped when Zsh is not installed, except in CI. CI runs them on Ubuntu and macOS, then does a real `./install --packages` into a throwaway home.
+The tests run locally using throwaway homes, the real Bash, Zsh and Git, and a fake `gh`. Zsh tests are skipped when Zsh is not installed. GitHub Actions CI is not configured for this repository.
