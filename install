@@ -1,0 +1,175 @@
+#!/usr/bin/env python3
+"""Link this repository's home/ tree into $HOME, one symlink per file.
+
+Checks every destination first and changes nothing if any of them is already
+taken by a real file or a different symlink. Links that are already correct are
+left alone, so it is safe to run again after `git pull`. A starter ~/.gitconfig
+is created only when none exists; existing local files are never edited.
+
+With --packages, also installs the tools this setup expects (Homebrew on macOS,
+apt on Ubuntu, herdr's official installer where apt has no package).
+"""
+
+import argparse
+import os
+import platform
+import shutil
+import subprocess
+import sys
+
+REPO = os.path.dirname(os.path.realpath(__file__))
+SOURCE = os.path.join(REPO, "home")
+
+TOOLS = ["git", "gh", "tmux", "herdr"]
+BREW_PACKAGES = ["git", "gh", "tmux"]
+APT_PACKAGES = ["curl", "git", "gh", "tmux"]
+# Created when missing so `git config --global` (and `gh auth setup-git`)
+# write to a local file instead of through a link into this repository.
+GITCONFIG_STUB = """\
+# Machine-local Git settings, read after the shared defaults in
+# ~/.config/git/config. `git config --global` also writes here.
+# Include conf.d fragments and directory identities: see the dotfiles README.
+"""
+
+# Fails when either the download or the installer fails, unlike curl | sh.
+HERDR_INSTALL = 'set -e; script=$(curl -fsSL https://herdr.dev/install.sh); printf "%s\\n" "$script" | sh'
+
+
+def plan_links(home):
+    """Return (to_link, already_linked, conflicts) as lists of (src, dst)."""
+    to_link, linked, conflicts = [], [], []
+    for root, _dirs, files in os.walk(SOURCE):
+        for name in sorted(files):
+            src = os.path.join(root, name)
+            dst = os.path.join(home, os.path.relpath(src, SOURCE))
+            problem = check_destination(home, src, dst)
+            if problem == "linked":
+                linked.append((src, dst))
+            elif problem:
+                conflicts.append((dst, problem))
+            else:
+                to_link.append((src, dst))
+    return to_link, linked, conflicts
+
+
+def check_destination(home, src, dst):
+    """Return None if dst is free, "linked" if done, else a conflict reason."""
+    if os.path.islink(dst):
+        if os.path.realpath(dst) == os.path.realpath(src):
+            return "linked"
+        return "symlink to " + os.readlink(dst)
+    if os.path.lexists(dst):
+        return "directory" if os.path.isdir(dst) else "file"
+    parent = os.path.dirname(dst)
+    while parent != home and not os.path.isdir(parent):
+        if os.path.lexists(parent):
+            return "parent " + parent + " is not a directory"
+        parent = os.path.dirname(parent)
+    return None
+
+
+def link(home, dry_run):
+    to_link, linked, conflicts = plan_links(home)
+    if conflicts:
+        print("Nothing changed. These destinations are already taken:")
+        for dst, reason in conflicts:
+            print("  " + dst + " (" + reason + ")")
+        print("Move them aside (or merge them into local conf.d files), then run again.")
+        return False
+    for src, dst in to_link:
+        print(("would link " if dry_run else "linked ") + dst)
+        if not dry_run:
+            os.makedirs(os.path.dirname(dst), exist_ok=True)
+            os.symlink(src, dst)
+    print("%d linked, %d already in place" % (len(to_link), len(linked)))
+    create_gitconfig(home, dry_run)
+    return True
+
+
+def create_gitconfig(home, dry_run):
+    path = os.path.join(home, ".gitconfig")
+    if os.path.lexists(path):
+        if os.path.realpath(path).startswith(REPO + os.sep):
+            print("Warning: " + path + " resolves into this repository ("
+                  + os.path.realpath(path) + "), so `git config --global` can modify"
+                  " repository files. Replace it with a local file.")
+        return
+    print(("would create " if dry_run else "created ") + path)
+    if not dry_run:
+        with open(path, "x") as handle:
+            handle.write(GITCONFIG_STUB)
+
+
+def find_tool(name, home):
+    """Find a tool on PATH or in ~/.local/bin, ignoring files from this repo."""
+    path = os.environ.get("PATH", "") + os.pathsep + os.path.join(home, ".local", "bin")
+    for directory in path.split(os.pathsep):
+        candidate = os.path.join(directory, name)
+        if not directory or not os.path.isfile(candidate) or not os.access(candidate, os.X_OK):
+            continue
+        if os.path.realpath(candidate).startswith(SOURCE + os.sep):
+            continue
+        return candidate
+    return None
+
+
+def package_commands(home):
+    """Return the commands --packages runs on this platform, or exit."""
+    system = platform.system()
+    if system == "Darwin":
+        if not shutil.which("brew"):
+            sys.exit("Homebrew is required on macOS: https://brew.sh")
+        herdr = [] if find_tool("herdr", home) else ["herdr"]
+        return [["brew", "install"] + BREW_PACKAGES + herdr]
+    if system == "Linux":
+        if not shutil.which("apt-get"):
+            sys.exit("apt-get not found: package installation supports Ubuntu only")
+        sudo = [] if os.geteuid() == 0 else ["sudo"]
+        commands = [
+            sudo + ["apt-get", "update"],
+            sudo + ["apt-get", "install", "-y"] + APT_PACKAGES,
+        ]
+        if not find_tool("herdr", home):
+            commands.append(["sh", "-c", HERDR_INSTALL])
+        return commands
+    sys.exit("Unsupported platform for --packages: " + system)
+
+
+def install_packages(home, dry_run):
+    for command in package_commands(home):
+        print(("would run: " if dry_run else "running: ") + " ".join(command))
+        if not dry_run:
+            subprocess.run(command, check=True)
+
+
+def report_tools(home):
+    missing = [tool for tool in TOOLS if not find_tool(tool, home)]
+    if missing:
+        print("Missing tools: " + ", ".join(missing) + ". Install them with: ./install --packages")
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--packages", action="store_true", help="also install git, gh, tmux and herdr")
+    parser.add_argument("--dry-run", action="store_true", help="show what would change, change nothing")
+    args = parser.parse_args(argv)
+    sys.stdout.reconfigure(line_buffering=True)
+
+    home = os.path.realpath(os.path.expanduser("~"))
+    if not os.path.isdir(home):
+        sys.exit("HOME is not a directory: " + home)
+
+    if not link(home, args.dry_run):
+        return 1
+    if args.packages:
+        try:
+            install_packages(home, args.dry_run)
+        except subprocess.CalledProcessError as error:
+            print("Package installation failed: " + " ".join(error.cmd), file=sys.stderr)
+            return 1
+    report_tools(home)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

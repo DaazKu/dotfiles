@@ -1,0 +1,7 @@
+# Maps an exact Git user.name to the file holding that identity's GitHub token.
+# Keep token files outside this repository, readable only by you (chmod 600).
+
+[identity "alex-example"]
+	tokenFile = ~/.config/github-tokens/personal
+[identity "alex-example-work"]
+	tokenFile = ~/.config/github-tokens/work

@@ -1,0 +1,86 @@
+#!/bin/sh
+# gh wrapper: picks a GitHub token from the effective Git user.name, then runs
+# the real gh. See README.md, "gh tokens".
+#
+# 1. GH_TOKEN or GITHUB_TOKEN already set: used as is.
+# 2. user.name listed in ~/.config/gh-wrapper/identities: GH_TOKEN is read
+#    from that identity's tokenFile.
+# 3. Otherwise gh uses its own authentication (gh auth login).
+#
+# GH_WRAPPER_DEBUG=1 explains each decision on stderr, never the token.
+
+debug() {
+  [ "${GH_WRAPPER_DEBUG:-}" = 1 ] && printf 'gh-wrapper: %s\n' "$*" >&2
+  return 0
+}
+
+warn() {
+  printf 'gh-wrapper: warning: %s\n' "$*" >&2
+}
+
+find_real_gh() {
+  _ifs=$IFS
+  IFS=:
+  for _dir in $PATH; do
+    IFS=$_ifs
+    [ -n "$_dir" ] || continue
+    _candidate="$_dir/gh"
+    if [ -f "$_candidate" ] && [ -x "$_candidate" ] && ! [ "$_candidate" -ef "$0" ]; then
+      printf '%s\n' "$_candidate"
+      return 0
+    fi
+  done
+  IFS=$_ifs
+  return 1
+}
+
+real_gh=$(find_real_gh) || {
+  printf 'gh-wrapper: error: no gh executable found in PATH besides this wrapper (%s)\n' "$0" >&2
+  exit 127
+}
+debug "real gh: $real_gh"
+
+if [ -n "${GH_TOKEN:-}" ]; then
+  debug "token source: GH_TOKEN from the environment"
+  exec "$real_gh" "$@"
+fi
+if [ -n "${GITHUB_TOKEN:-}" ]; then
+  debug "token source: GITHUB_TOKEN from the environment"
+  exec "$real_gh" "$@"
+fi
+
+identity=$(git config --get user.name 2>/dev/null) || identity=
+if [ -z "$identity" ]; then
+  debug "identity: none (git user.name is not set here)"
+  debug "token source: none injected, gh uses its own authentication"
+  exec "$real_gh" "$@"
+fi
+debug "identity: \"$identity\" (git user.name)"
+
+identities="$HOME/.config/gh-wrapper/identities"
+if [ -f "$identities" ]; then
+  debug "mapping: $identities (loaded)"
+else
+  debug "mapping: $identities (missing)"
+fi
+
+token_file=$(git config --file "$identities" --type=path --get "identity.$identity.tokenFile" 2>/dev/null) || token_file=
+if [ -z "$token_file" ]; then
+  debug "token source: none injected, no mapping for \"$identity\", gh uses its own authentication"
+  exec "$real_gh" "$@"
+fi
+
+token=
+if [ -f "$token_file" ] && [ -r "$token_file" ]; then
+  token=$(tr -d ' \t\r\n' < "$token_file")
+fi
+if [ -z "$token" ]; then
+  warn "token file for \"$identity\" is missing, unreadable or empty: $token_file; continuing without it"
+  debug "token source: none injected, gh uses its own authentication"
+  exec "$real_gh" "$@"
+fi
+
+debug "token source: $token_file (mapped from \"$identity\")"
+GH_TOKEN=$token
+export GH_TOKEN
+exec "$real_gh" "$@"
